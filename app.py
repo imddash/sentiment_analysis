@@ -8,20 +8,38 @@ from nltk.stem import WordNetLemmatizer
 from nltk import pos_tag
 from sklearn.exceptions import NotFittedError
 
-# Download NLTK data (safe to run multiple times)
-nltk.download('punkt')
-nltk.download('stopwords')
-nltk.download('averaged_perceptron_tagger')
-nltk.download('wordnet')
+# --- NLTK setup for Streamlit Cloud ---
+def setup_nltk():
+    try:
+        nltk.data.find('corpora/stopwords')
+    except LookupError:
+        nltk.download('stopwords', quiet=True)
 
-# Load NLTK tools
+    try:
+        nltk.data.find('tokenizers/punkt')
+    except LookupError:
+        nltk.download('punkt', quiet=True)
+
+    try:
+        nltk.data.find('taggers/averaged_perceptron_tagger')
+    except LookupError:
+        nltk.download('averaged_perceptron_tagger', quiet=True)
+
+    try:
+        nltk.data.find('corpora/wordnet')
+    except LookupError:
+        nltk.download('wordnet', quiet=True)
+
+setup_nltk()
+
+# --- Load NLTK tools ---
 stop_words = set(stopwords.words("english"))
 lemmatizer = WordNetLemmatizer()
 
 # Emoji pattern
 emoji_pattern = re.compile(r'(?::|;|=)(?:-)?(?:\)|\(|D|P)')
 
-# Label mapping (adjust according to your model)
+# Label mapping
 label_map = {
     0: "Negative",
     1: "Positive",
@@ -33,16 +51,13 @@ def preprocess_text(text):
     if not isinstance(text, str):
         return ""
     
-    # Remove HTML
-    text = re.sub(r'<[^>]+>', '', text)
-    # Extract emojis
+    text = re.sub(r'<[^>]+>', '', text)  # Remove HTML tags
     emojis = emoji_pattern.findall(text)
-    # Clean text
     text = re.sub(r'[^a-z0-9 ]', '', text.lower()) + ' ' + ' '.join(emojis).replace('-', '')
+    
     words = text.split()
-    # Remove stopwords
     words = [word for word in words if word not in stop_words]
-    # POS tagging and lemmatization
+    
     tagged = pos_tag(words)
     lemmas = []
     for word, tag in tagged:
@@ -54,6 +69,7 @@ def preprocess_text(text):
         elif tag.startswith('R'):
             pos = 'r'
         lemmas.append(lemmatizer.lemmatize(word, pos))
+    
     return ' '.join(lemmas)
 
 # --- Load Model and Vectorizer ---
@@ -64,20 +80,20 @@ def load_model():
         model = joblib.load(os.path.join("model", "sentiment_model.pkl"))
         return vectorizer, model
     except Exception as e:
-        st.error(f"Error loading model or vectorizer: {e}")
+        st.error(f"❌ Error loading model or vectorizer: {e}")
         st.stop()
 
 vectorizer, model = load_model()
 
 # --- Streamlit App UI ---
-st.title("🧠 Sentiment Analysis Web App")
-st.write("Analyze the sentiment of any sentence or social media text using a trained ML model.")
+st.title("🧠 Sentiment Analysis App")
+st.write("Analyze the sentiment of a sentence, tweet, or message using a trained machine learning model.")
 
-user_input = st.text_area("Enter text here:", height=150)
+user_input = st.text_area("✏️ Enter your text here:", height=150)
 
 if st.button("Analyze Sentiment"):
     if not user_input.strip():
-        st.warning("Please enter some text.")
+        st.warning("⚠️ Please enter some text.")
     else:
         clean_text = preprocess_text(user_input)
         try:
@@ -89,7 +105,8 @@ if st.button("Analyze Sentiment"):
             st.markdown("#### 📊 Confidence Levels:")
             for idx, prob in enumerate(probabilities):
                 st.write(f"{label_map[idx]}: {round(prob * 100, 2)}%")
+
         except NotFittedError:
-            st.error("Model is not fitted. Please check your training code.")
+            st.error("⚠️ Model is not fitted. Please check your training script.")
         except Exception as e:
-            st.error(f"Prediction failed: {e}")
+            st.error(f"❌ Prediction failed: {e}")

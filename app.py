@@ -32,6 +32,12 @@ def setup_nltk():
 
 setup_nltk()
 
+# 🚨 Force download of required NLTK resources
+nltk.download('stopwords')
+nltk.download('punkt')
+nltk.download('averaged_perceptron_tagger')
+nltk.download('wordnet')
+
 # --- Load NLTK tools ---
 stop_words = set(stopwords.words("english"))
 lemmatizer = WordNetLemmatizer()

@@ -1,43 +1,51 @@
 import streamlit as st
 import re
 import nltk
-import pickle
-import numpy as np
+import joblib
+import os
 from nltk.corpus import stopwords
-from nltk.stem.wordnet import WordNetLemmatizer
+from nltk.stem import WordNetLemmatizer
+from nltk import pos_tag
+from sklearn.exceptions import NotFittedError
 
-# NLTK downloads (do only once)
-nltk.download('stopwords')
+# Download NLTK data (safe to run multiple times)
 nltk.download('punkt')
+nltk.download('stopwords')
 nltk.download('averaged_perceptron_tagger')
 nltk.download('wordnet')
 
-# Load stopwords and lemmatizer
-stopwords_set = set(stopwords.words('english'))
+# Load NLTK tools
+stop_words = set(stopwords.words("english"))
 lemmatizer = WordNetLemmatizer()
 
-# Emoji regex
-emoji_pattern = re.compile('(?::|;|=)(?:-)?(?:\\)|\\(|D|P)')
+# Emoji pattern
+emoji_pattern = re.compile(r'(?::|;|=)(?:-)?(?:\)|\(|D|P)')
 
-# Label mapping (based on your training setup)
+# Label mapping (adjust according to your model)
 label_map = {
     0: "Negative",
     1: "Positive",
     2: "Neutral"
 }
 
-# Preprocessing function
-def preprocessing(text):
+# --- Preprocessing Function ---
+def preprocess_text(text):
     if not isinstance(text, str):
         return ""
-    text = re.sub('<[^>]*>', '', text)  # Remove HTML
+    
+    # Remove HTML
+    text = re.sub(r'<[^>]+>', '', text)
+    # Extract emojis
     emojis = emoji_pattern.findall(text)
-    text = re.sub('[^a-z0-9 ]', '', text.lower()) + ' ' + ' '.join(emojis).replace('-', '')
+    # Clean text
+    text = re.sub(r'[^a-z0-9 ]', '', text.lower()) + ' ' + ' '.join(emojis).replace('-', '')
     words = text.split()
-    words = [word for word in words if word not in stopwords_set]
-    tagged_words = nltk.pos_tag(words)
-    lemmatized_words = []
-    for word, tag in tagged_words:
+    # Remove stopwords
+    words = [word for word in words if word not in stop_words]
+    # POS tagging and lemmatization
+    tagged = pos_tag(words)
+    lemmas = []
+    for word, tag in tagged:
         pos = 'n'
         if tag.startswith('J'):
             pos = 'a'
@@ -45,31 +53,43 @@ def preprocessing(text):
             pos = 'v'
         elif tag.startswith('R'):
             pos = 'r'
-        lemmatized_words.append(lemmatizer.lemmatize(word, pos))
-    return " ".join(lemmatized_words)
+        lemmas.append(lemmatizer.lemmatize(word, pos))
+    return ' '.join(lemmas)
 
-# Load model and vectorizer
-import joblib
-import os
-vectorizer = joblib.load(os.path.join("model", "vectorizer.pkl"))
-model = joblib.load(os.path.join("model", "sentiment_model.pkl"))
+# --- Load Model and Vectorizer ---
+@st.cache_resource
+def load_model():
+    try:
+        vectorizer = joblib.load(os.path.join("model", "vectorizer.pkl"))
+        model = joblib.load(os.path.join("model", "sentiment_model.pkl"))
+        return vectorizer, model
+    except Exception as e:
+        st.error(f"Error loading model or vectorizer: {e}")
+        st.stop()
 
-# Streamlit UI
-st.title("Sentiment Analysis App")
-user_input = st.text_area("Enter a sentence or tweet:")
+vectorizer, model = load_model()
+
+# --- Streamlit App UI ---
+st.title("🧠 Sentiment Analysis Web App")
+st.write("Analyze the sentiment of any sentence or social media text using a trained ML model.")
+
+user_input = st.text_area("Enter text here:", height=150)
 
 if st.button("Analyze Sentiment"):
-    clean_text = preprocessing(user_input)
-    X_input = vectorizer.transform([clean_text])
+    if not user_input.strip():
+        st.warning("Please enter some text.")
+    else:
+        clean_text = preprocess_text(user_input)
+        try:
+            vectorized_input = vectorizer.transform([clean_text])
+            prediction = model.predict(vectorized_input)[0]
+            probabilities = model.predict_proba(vectorized_input)[0]
 
-    # Get prediction and probabilities
-    prediction = model.predict(X_input)[0]
-    probabilities = model.predict_proba(X_input)[0]
-
-    # Show overall sentiment
-    st.markdown(f"### Predicted Sentiment: **{label_map[prediction]}**")
-
-    # Show probability breakdown
-    st.markdown("#### Sentiment Confidence:")
-    for label, prob in enumerate(probabilities):
-        st.write(f"{label_map[label]}: {round(prob * 100, 2)}%")
+            st.markdown(f"### 🎯 Predicted Sentiment: **{label_map[prediction]}**")
+            st.markdown("#### 📊 Confidence Levels:")
+            for idx, prob in enumerate(probabilities):
+                st.write(f"{label_map[idx]}: {round(prob * 100, 2)}%")
+        except NotFittedError:
+            st.error("Model is not fitted. Please check your training code.")
+        except Exception as e:
+            st.error(f"Prediction failed: {e}")

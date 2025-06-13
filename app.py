@@ -35,7 +35,7 @@ setup_nltk()
 # 🚨 Force download of required NLTK resources
 nltk.download('stopwords')
 nltk.download('punkt')
-nltk.download('averaged_perceptron_tagger')
+nltk.download('averaged_perceptron_tagger_eng')  # ✅ This is the fix
 nltk.download('wordnet')
 
 # --- Load NLTK tools ---
